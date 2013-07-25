@@ -1,13 +1,13 @@
 clone-killa
 ===========
 
-Runs clonedigger report on source code and optionally sends a HipChat notification.
+Runs clonedigger (http://clonedigger.sourceforge.net) report on source code and optionally sends a HipChat notification.
 
 Help:
 process_clone_report.py -p <project_name>
 
 Optional:
--s <value> Source directory (default is '+DEFAULT_SOURCE_DIR+')
+-s <value> Source directory
 -i <value> Ignore directory
 -c <value> Clonedigger exec path
 -o <value> Output directory for report
