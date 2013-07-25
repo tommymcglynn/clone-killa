@@ -19,9 +19,10 @@ def main(argv):
     ignore_dirs = []
     clonedigger_path = None
     source_dir = None
-    help_text = 'process_clone_report.py -p <project_name>\n\nOptional:\n-s Source directory (default is '+DEFAULT_SOURCE_DIR+')\n-i Ignore directory\n-c Clonedigger exec path (Default is '+DEFAULT_CLONEDIGGER_PATH+')\n\nExamples:\nprocess_clone_report.py -p MyProject\nprocess_clone_report.py -p MyProject -i dirToIgnore -i anotherDirToIgnore'
+    send_notification = False
+    help_text = 'process_clone_report.py -p <project_name>\n\nOptional:\n-s <value> Source directory (default is '+DEFAULT_SOURCE_DIR+')\n-i <value> Ignore directory\n-c <value> Clonedigger exec path (Default is '+DEFAULT_CLONEDIGGER_PATH+')\n-n Send notification\n\nExamples:\nprocess_clone_report.py -p MyProject\nprocess_clone_report.py -p MyProject -i dirToIgnore -i anotherDirToIgnore'
     try:
-    	opts, args = getopt.getopt(argv,"hp:i:s:c:")
+    	opts, args = getopt.getopt(argv,"hnp:i:s:c:")
     except getopt.GetoptError:
         print help_text
         sys.exit(2)        
@@ -37,9 +38,11 @@ def main(argv):
             source_dir = arg
         elif opt in ("-c"):
             clonedigger_path = arg
+        elif opt in ("-n"):
+            send_notification = True
 	
     if project_name is None:
-        print 'Must supply project name:\n'+help_text
+        print 'Error: Must supply project name:\n'+help_text
         sys.exit()
 
     # Default values
@@ -53,22 +56,29 @@ def main(argv):
     # Build path to clone report
     home_path = os.getenv("HOME")
     report_name = project_name+REPORT_SUFFIX
-    report_path = home_path+'/'+REPORT_DIR_RELATIVE_TO_HOME+'/'+report_name
+    report_dir = home_path+'/'+REPORT_DIR_RELATIVE_TO_HOME
+    if os.path.isdir(report_dir) is False:
+        # Report dir does not exist
+        print 'Error: Output directory does not exist:\n'+report_dir
+        sys.exit()
+    report_path = report_dir+'/'+report_name
     relative_report_path = os.path.relpath(report_path)
     # Generate clone report
-    print 'Generating clone report:\n'+report_path
-    clonedigger_cmd = clonedigger_path+ignore_dirs_cmd+' '+relative_report_path+' '+source_dir
+    print 'Generating clone report: '+report_path
+    clonedigger_cmd = clonedigger_path+ignore_dirs_cmd+' --output='+relative_report_path+' '+source_dir
+    print clonedigger_cmd
     os.system(clonedigger_cmd)
 
     # Ensure clone report was generated
     if os.path.isfile(report_path) is False:
         # Clone report can't be found.
-        print('Failed to generate clone report')
+        print('Error: Failed to generate clone report')
         sys.exit()
 
     # Send clone report message to HipChat
-    report_url = PUBLIC_REPORT_BASE_URL+'/'+REPORT_DIR_RELATIVE_TO_HOME+'/'+report_name
-    #send_clone_report_to_hipchat(project_name, report_url)
+    if send_notification:
+        report_url = PUBLIC_REPORT_BASE_URL+'/'+REPORT_DIR_RELATIVE_TO_HOME+'/'+report_name
+        send_clone_report_to_hipchat(project_name, report_url)
 
 def send_clone_report_to_hipchat(project_name, url):
     message = 'Generated clone report for '+project_name+' (<a href="'+url+'">Open</a>)'
