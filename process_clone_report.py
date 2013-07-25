@@ -3,15 +3,10 @@
 import sys, os, getopt
 import hipchat
 
-HIPCHAT_API_TOKEN = '7f5bcfce32f121ae98e1e2eba602bb'
-HIPCHAT_ROOM_ID = '48723'
 HIPCHAT_MESSAGE_NAME = 'Clone Report'
-HIPCHAT_API = hipchat.HipChat(token=HIPCHAT_API_TOKEN)
 
 DEFAULT_CLONEDIGGER_PATH = '/usr/lib/clonedigger/clonedigger/clonedigger.py'
 DEFAULT_SOURCE_DIR = '.'
-REPORT_DIR_RELATIVE_TO_HOME = 'userContent'
-PUBLIC_REPORT_BASE_URL = 'http://build.testflightapp.com'
 REPORT_SUFFIX = '-clone_report.html'
 
 def main(argv):
@@ -19,10 +14,16 @@ def main(argv):
     ignore_dirs = []
     clonedigger_path = None
     source_dir = None
+    report_dir = None
     send_notification = False
-    help_text = 'process_clone_report.py -p <project_name>\n\nOptional:\n-s <value> Source directory (default is '+DEFAULT_SOURCE_DIR+')\n-i <value> Ignore directory\n-c <value> Clonedigger exec path (Default is '+DEFAULT_CLONEDIGGER_PATH+')\n-n Send notification\n\nExamples:\nprocess_clone_report.py -p MyProject\nprocess_clone_report.py -p MyProject -i dirToIgnore -i anotherDirToIgnore'
+    hipchat_api_token = None
+    hipchat_room_id = None
+    public_report_base_url = None
+    help_text = 'process_clone_report.py -p <project_name>'
+    help_text += '\n\nOptional:\n-s <value> Source directory (default is '+DEFAULT_SOURCE_DIR+')\n-i <value> Ignore directory\n-c <value> Clonedigger exec path (Default is '+DEFAULT_CLONEDIGGER_PATH+')\n-o <value> Output directory for report\n-n Send notification (Requires -a <hipchat_api_token> -r <hipchat_room_id> -u <base_url_for_public_report>)'
+    help_text += '\n\nExamples:\nprocess_clone_report.py -p MyProject\nprocess_clone_report.py -p MyProject -i dirToIgnore -i anotherDirToIgnore'
     try:
-    	opts, args = getopt.getopt(argv,"hnp:i:s:c:")
+    	opts, args = getopt.getopt(argv,"hnp:i:s:c:a:r:o:u:")
     except getopt.GetoptError:
         print help_text
         sys.exit(2)        
@@ -40,6 +41,14 @@ def main(argv):
             clonedigger_path = arg
         elif opt in ("-n"):
             send_notification = True
+        elif opt in ("-a"):
+            hipchat_api_token = arg
+        elif opt in ("-r"):
+            hipchat_room_id = arg
+        elif opt in ("-o"):
+            report_dir = arg
+        elif opt in ("-u"):
+            public_report_base_url = arg
 	
     if project_name is None:
         print 'Error: Must supply project name:\n'+help_text
@@ -54,9 +63,9 @@ def main(argv):
     for ignore_dir in ignore_dirs:
         ignore_dirs_cmd += ' --ignore-dir='+ignore_dir
     # Build path to clone report
-    home_path = os.getenv("HOME")
     report_name = project_name+REPORT_SUFFIX
-    report_dir = home_path+'/'+REPORT_DIR_RELATIVE_TO_HOME
+    if report_dir is None:
+        report_dir = os.getenv("HOME")
     if os.path.isdir(report_dir) is False:
         # Report dir does not exist
         print 'Error: Output directory does not exist:\n'+report_dir
@@ -72,21 +81,27 @@ def main(argv):
     # Ensure clone report was generated
     if os.path.isfile(report_path) is False:
         # Clone report can't be found.
-        print('Error: Failed to generate clone report')
+        print 'Error: Failed to generate clone report'
         sys.exit()
 
     # Send clone report message to HipChat
     if send_notification:
-        report_url = PUBLIC_REPORT_BASE_URL+'/'+REPORT_DIR_RELATIVE_TO_HOME+'/'+report_name
-        send_clone_report_to_hipchat(project_name, report_url)
+        if hipchat_api_token and hipchat_room_id and public_report_base_url:
+            hipchat_api = hipchat.HipChat(token=hipchat_api_token)
+            report_url = public_report_base_url+'/'+report_name
+            send_clone_report_to_hipchat(hipchat_api, hipchat_room_id, project_name, report_url)
+        else:
+            print 'Warning: Notification will not be sent because required options were not specified. See help -h'
 
-def send_clone_report_to_hipchat(project_name, url):
+def send_clone_report_to_hipchat(hipchat_api, room_id, project_name, url):
+    if hipchat_api is None:
+        print 'Warning: Was unable to establish HipChat API'
+        return
     message = 'Generated clone report for '+project_name+' (<a href="'+url+'">Open</a>)'
     print('Will send HipChat message: '+message)
-    return
-    HIPCHAT_API.method(url='rooms/message/', 
+    hipchat_api.method(url='rooms/message/', 
 		method='POST', 
-		parameters={'room_id': HIPCHAT_ROOM_ID, 
+		parameters={'room_id': room_id, 
 		'from': HIPCHAT_MESSAGE_NAME, 
 		'message': message, 
 		'message_format': 'html', 
